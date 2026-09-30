@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import {
-  Cable, ChevronDown, Download, FileImage, FileJson, Frame, ImagePlus, Images, Plus,
-  RotateCcw, Shuffle, Sparkles, Spline, Type, Upload, Wind,
-} from 'lucide-react';
+import { Frame, ImagePlus, Images, Plus, Spline, Type, Wind } from 'lucide-react';
 import { CollageEngine, DEFAULT_SETTINGS, FONT_FAMILY, PRESETS } from './engine.js';
 import {
-  Color, DropZone, Field, Menu, NumberInput, Section, Segmented, Select, Slider, Toggle,
+  Color, DropZone, Field, NumberInput, Section, Segmented, Select, Slider, Toggle,
 } from './components/Controls.jsx';
 import { Inspector } from './components/Inspector.jsx';
 import { TexturePicker } from './components/TexturePicker.jsx';
 import { outputInfo } from './print.js';
 import { linkProps } from './router.js';
+import { LANDING_ENABLED } from './config.js';
 
 const PLACEHOLDER_COUNT = 8;
 const f = (n, p) => Number(n).toFixed(p);
@@ -19,6 +17,17 @@ const LAYOUT_KEYS = ['margin', 'canvasW', 'canvasH', 'preset'];
 const CABLE_KEYS = ['cableMode', 'cablesPer', 'layering'];
 
 const hasFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+
+/* Corner-to-corner cross, like an empty image box on a layout sheet. */
+const Cross = () => (
+  <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+    <line x1="0" y1="0" x2="100" y2="100" vectorEffect="non-scaling-stroke" />
+    <line x1="100" y1="0" x2="0" y2="100" vectorEffect="non-scaling-stroke" />
+  </svg>
+);
+
+/* The bent arrow from a toolbar label down to its options (drawn in CSS so it can shorten). */
+const Elbow = () => <span className="elbow" aria-hidden="true" />;
 
 export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -128,49 +137,40 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Layout-sheet frame: crossed gutter cells in the header row, empty gutters below. */}
+      <div className="gutter x-cell g-left" style={{ gridArea: 'x1' }} aria-hidden="true"><Cross /></div>
+      <div className="gutter x-cell g-mid" style={{ gridArea: 'x2' }} aria-hidden="true"><Cross /></div>
+      <div className="gutter x-cell g-right" style={{ gridArea: 'x3' }} aria-hidden="true"><Cross /></div>
+      <div className="gutter g-left" style={{ gridArea: 'g1' }} aria-hidden="true" />
+      <div className="gutter g-mid" style={{ gridArea: 'g2' }} aria-hidden="true" />
+      <div className="gutter g-right" style={{ gridArea: 'g3' }} aria-hidden="true" />
+
       <header className="toolbar">
-        <div className="brand">
-          <a className="brand-link" {...linkProps('/')} title="Back to home">
-            <span className="logo"><Cable size={16} strokeWidth={2.25} /></span>
-            <span className="brand-name">RAUT SEMRAWUT</span>
-          </a>
+        <button className="tb-link" title="Re-layout pieces on a new grid" onClick={() => engine.compose()}>Auto compose</button>
+        <button className="tb-link" title="New cable routing, same layout" onClick={() => engine.reshuffle()}>Reshuffle cables</button>
+        <button className="tb-link" title="Back to placeholders" onClick={() => engine.reset()}>Reset</button>
+        <div className="tb-group">
+          <span className="tb-label">Export</span>
+          <div className="tb-sub">
+            <Elbow />
+            <button className="tb-link" title={`Lossless, no compression · ${outLabel}`} onClick={() => engine.exportImage('image/png')}>PNG</button>
+            <span className="tb-sep">//</span>
+            <button className="tb-link" title={`Maximum quality (100%) · ${outLabel}`} onClick={() => engine.exportImage('image/jpeg')}>JPEG</button>
+          </div>
         </div>
-
-        <div className="tool-group">
-          <button className="btn btn-ghost" data-tip="Re-layout pieces on a new grid" onClick={() => engine.compose()}>
-            <Sparkles size={15} /><span className="lbl">Auto compose</span>
-          </button>
-          <button className="btn btn-ghost" data-tip="New cable routing, same layout" onClick={() => engine.reshuffle()}>
-            <Shuffle size={15} /><span className="lbl">Reshuffle</span>
-          </button>
-          <button className="btn btn-ghost" data-tip="Back to placeholders" onClick={() => engine.reset()}>
-            <RotateCcw size={15} /><span className="lbl">Reset</span>
-          </button>
+        <div className="tb-group">
+          <span className="tb-label">Project</span>
+          <div className="tb-sub">
+            <Elbow />
+            <button className="tb-link" title="Save as JSON to reopen later" onClick={() => engine.exportJson()}>Save</button>
+            <span className="tb-sep">//</span>
+            <button className="tb-link" title="Open a saved JSON project" onClick={() => importRef.current.click()}>Open</button>
+          </div>
         </div>
-
-        <div className="toolbar-end">
-          <Menu trigger={({ open, toggle }) => (
-            <button className="btn btn-primary" aria-expanded={open} aria-haspopup="menu" onClick={toggle}>
-              <Download size={15} /><span className="lbl">Export</span><ChevronDown size={14} className={open ? 'flip' : ''} />
-            </button>
-          )}>
-            <button role="menuitem" onClick={() => engine.exportImage('image/png')}>
-              <FileImage size={15} /><span>PNG<small>Lossless, no compression · {outLabel}</small></span>
-            </button>
-            <button role="menuitem" onClick={() => engine.exportImage('image/jpeg')}>
-              <FileImage size={15} /><span>JPEG<small>Maximum quality (100%) · {outLabel}</small></span>
-            </button>
-            <div className="menu-sep" />
-            <button role="menuitem" onClick={() => engine.exportJson()}>
-              <FileJson size={15} /><span>Save project<small>JSON, reopen later</small></span>
-            </button>
-            <button role="menuitem" onClick={() => importRef.current.click()}>
-              <Upload size={15} /><span>Open project<small>Import a saved JSON</small></span>
-            </button>
-          </Menu>
-          <input ref={importRef} type="file" accept="application/json,.json" onChange={onImport} hidden />
-        </div>
+        <input ref={importRef} type="file" accept="application/json,.json" onChange={onImport} hidden />
       </header>
+
+      <a className="brand" {...linkProps('/')} title={LANDING_ENABLED ? 'Back to home' : 'RAUT SEMRAWUT'}>RAUT SEMRAWUT</a>
 
       <main className="stage" {...stageDrag}>
         <div ref={wrapRef} className="canvas-wrap">

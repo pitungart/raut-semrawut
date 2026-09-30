@@ -188,23 +188,3 @@ export function DropZone({ onFiles }) {
     </div>
   );
 }
-
-/* Small popover menu; closes on outside click or Escape. */
-export function Menu({ trigger, children }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = e => { if (!ref.current.contains(e.target)) setOpen(false); };
-    const onKey = e => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-  return (
-    <div className="menu" ref={ref}>
-      {trigger({ open, toggle: () => setOpen(o => !o) })}
-      {open && <div className="menu-pop" role="menu" onClick={() => setOpen(false)}>{children}</div>}
-    </div>
-  );
-}
