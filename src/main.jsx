@@ -1,22 +1,22 @@
 import React, { lazy, Suspense, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './app.css';
-import Landing from './Landing.jsx';
+import { LANDING_ENABLED } from './config.js';
 import { usePath } from './router.js';
 
-// The studio (engine, textures, controls) loads only when someone opens it.
+// Each route loads its own code: the studio (engine, textures, controls) and the landing page.
 const Studio = lazy(() => import('./App.jsx'));
+const Landing = lazy(() => import('./Landing.jsx'));
 
 function Root() {
   const path = usePath();
-  const inStudio = path.replace(/\/+$/, '') === '/studio';
+  const inStudio = !LANDING_ENABLED || path.replace(/\/+$/, '') === '/studio';
   useEffect(() => {
-    document.title = inStudio ? 'Studio · RAUT SEMRAWUT' : 'RAUT SEMRAWUT · Zine collage maker';
+    document.title = inStudio ? 'RAUT SEMRAWUT · Studio' : 'RAUT SEMRAWUT · Zine collage maker';
   }, [inStudio]);
-  if (!inStudio) return <Landing />;
   return (
-    <Suspense fallback={<div className="studio-loading"><span />Opening studio…</div>}>
-      <Studio />
+    <Suspense fallback={<div className="studio-loading"><span />Loading…</div>}>
+      {inStudio ? <Studio /> : <Landing />}
     </Suspense>
   );
 }
