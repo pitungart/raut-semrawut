@@ -1,41 +1,61 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ImagePlus } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronsUpDown } from 'lucide-react';
 
-export function Section({ title, icon: Icon, defaultOpen = false, children }) {
+/* Raw sidebar controls: black on white, Arial Narrow capitals, label on the left and the
+   control on the right. Native inputs sit underneath every custom look, so keyboard,
+   touch and screen-reader behaviour stay native. */
+
+export function Section({ title, defaultOpen = false, children }) {
   return (
     <details className="section" open={defaultOpen}>
       <summary>
-        {Icon && <Icon size={15} strokeWidth={2} className="section-icon" />}
         <span>{title}</span>
-        <ChevronDown size={15} className="chevron" />
+        <span className="sec-mark" aria-hidden="true" />
       </summary>
       <div className="section-body">{children}</div>
     </details>
   );
 }
 
-export function Field({ label, value, children }) {
+/* One sidebar row. `stack` puts the control under the label for wide content. */
+export function Field({ label, stack = false, children }) {
   return (
-    <div className="field">
-      {(label || value !== undefined) && (
-        <div className="field-head">
-          <span className="field-label">{label}</span>
-          {value !== undefined && <span className="pill">{value}</span>}
-        </div>
-      )}
-      {children}
+    <div className={'field' + (stack ? ' stack' : '')}>
+      {label && <span className="field-label">{label}</span>}
+      <div className="field-ctl">{children}</div>
     </div>
   );
 }
 
-/* Cable-style range: the filled part is a wavy cable, the rest a slack straight line
-   ending in a plug dot. A transparent native <input type=range> sits on top, so pointer,
-   keyboard and screen-reader behaviour stay native. */
-const WAVE_LEN = 14, WAVE_AMP = 3.2, THUMB_R = 8, TRACK_H = 24;
+/* ---------- cable slider ----------
+   Each slider is a loose cable with its own shape; the dot rides along the curve.
+   Shapes map u in [0, 1] (left to right) to a height in [0, 1] (top to bottom). */
+const SHAPES = {
+  down: u => 0.18 + 0.55 * u,
+  up: u => 0.82 - 0.6 * u,
+  sag: u => 0.12 + 0.72 * Math.sin(Math.PI * Math.pow(u, 0.8)) - 0.1 * u,
+  bump: u => 0.22 + 0.25 * u - 0.32 * Math.exp(-(((u - 0.7) / 0.09) ** 2)) + (u > 0.76 ? 1.5 * (u - 0.76) ** 1.4 : 0),
+  wave: u => 0.62 - 0.22 * Math.sin(Math.PI * 2 * u + 0.3) - 0.2 * u,
+  arch: u => 0.82 - 0.62 * Math.sin(Math.PI * u),
+  drop: u => 0.14 + 0.68 * u * u,
+  lift: u => 0.84 - 0.66 * Math.sqrt(u),
+  kink: u => (u < 0.42 ? 0.3 : u < 0.58 ? 0.3 + ((u - 0.42) / 0.16) * 0.42 : 0.72) + 0.04 * Math.sin(u * 9),
+  loose: u => 0.45 + 0.28 * Math.sin(u * 4.4 + 0.8) * (1 - u * 0.4),
+};
+const SHAPE_NAMES = Object.keys(SHAPES);
+// The sliders from the reference sheet keep its shapes; the rest get a stable pick by label.
+const SHAPE_FOR = { 'Size contrast': 'down', 'Cables per piece': 'sag', Weight: 'bump', Opacity: 'up', Sag: 'wave' };
+const shapeFor = label => {
+  if (SHAPE_FOR[label]) return SHAPE_FOR[label];
+  let h = 7;
+  for (const ch of String(label)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return SHAPE_NAMES[h % SHAPE_NAMES.length];
+};
 
-export function WaveRange({ value, min, max, step, label, onChange, onDoubleClick }) {
+const DOT_R = 5.5, TRACK_H = 34, PAD = 7;
+
+export function CableRange({ value, min, max, step, label, shape, onChange, onDoubleClick }) {
   const ref = useRef(null);
-  const clipId = 'wave' + useId().replace(/:/g, '');
   const [w, setW] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -45,30 +65,19 @@ export function WaveRange({ value, min, max, step, label, onChange, onDoubleClic
     return () => ro.disconnect();
   }, []);
 
+  const f = SHAPES[shape || shapeFor(label)];
+  const yAt = x => PAD + f(Math.min(1, Math.max(0, x / Math.max(1, w)))) * (TRACK_H - 2 * PAD);
   const t = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  const mid = TRACK_H / 2;
-  const tx = THUMB_R + t * Math.max(0, w - 2 * THUMB_R);
-  const gap = THUMB_R + 3;
-  // One long wave starting a wavelength early, so the CSS drift animation can loop seamlessly.
-  const halves = Math.ceil((w + WAVE_LEN * 2) / (WAVE_LEN / 2));
-  const wave = `M ${-WAVE_LEN} ${mid} q ${WAVE_LEN / 4} ${-WAVE_AMP * 2} ${WAVE_LEN / 2} 0` + ` t ${WAVE_LEN / 2} 0`.repeat(halves);
+  const tx = DOT_R + t * Math.max(0, w - 2 * DOT_R);
+  let d = '';
+  if (w > 0) for (let i = 0; i <= 64; i++) { const x = (i / 64) * w; d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + yAt(x).toFixed(1); }
 
   return (
-    <div className="wave" ref={ref}>
+    <div className="cable-range" ref={ref}>
       {w > 0 && (
-        <svg className="wave-svg" width={w} height={TRACK_H} aria-hidden="true">
-          <clipPath id={clipId}>
-            <rect x="0" y="0" width={Math.max(0, tx - gap)} height={TRACK_H} />
-          </clipPath>
-          <g clipPath={`url(#${clipId})`}>
-            <g className="wave-active"><path className="wave-path" d={wave} /></g>
-          </g>
-          {tx + gap < w - 3 && <line className="wave-rest" x1={tx + gap} y1={mid} x2={w - 3} y2={mid} />}
-          <circle className="wave-plug" cx={w - 3} cy={mid} r="2.5" />
-          <g className="wave-thumb" transform={`translate(${tx} ${mid})`}>
-            <circle r={THUMB_R} />
-            <circle className="wave-thumb-dot" r="2.6" />
-          </g>
+        <svg width={w} height={TRACK_H} aria-hidden="true">
+          <path d={d} />
+          <circle cx={tx} cy={yAt(tx)} r={DOT_R} />
         </svg>
       )}
       <input
@@ -80,62 +89,53 @@ export function WaveRange({ value, min, max, step, label, onChange, onDoubleClic
   );
 }
 
-export function Slider({ label, value, display, min, max, step, onChange }) {
+export function Slider({ label, value, display, min, max, step, shape, onChange }) {
   return (
-    <Field label={label} value={display ?? value}>
-      <WaveRange label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
-    </Field>
+    <div className="field slider-row">
+      <span className="field-label">{label}</span>
+      <CableRange label={label} shape={shape} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <span className="value">{display ?? value}</span>
+    </div>
+  );
+}
+
+/* ---------- choices: underlined text with ⌃⌄, a native <select> laid over it ---------- */
+function RawSelect({ label, value, options, onChange }) {
+  const idx = Math.max(0, options.findIndex(([v]) => v === value));
+  const [, text, title] = options[idx] || [];
+  return (
+    <span className="raw-select">
+      <span className="raw-select-text">{typeof text === 'string' ? text : title}</span>
+      <ChevronsUpDown size={13} strokeWidth={2.25} aria-hidden="true" />
+      <select value={idx} aria-label={label} onChange={e => onChange(options[+e.target.value][0])}>
+        {options.map(([v, t, ttl], i) => <option key={String(v)} value={i}>{typeof t === 'string' ? t : ttl}</option>)}
+      </select>
+    </span>
   );
 }
 
 export function Segmented({ label, value, options, onChange }) {
-  return (
-    <Field label={label}>
-      <div className="segmented" role="radiogroup" aria-label={label}>
-        {options.map(([v, text, title]) => (
-          <button
-            key={String(v)} type="button" role="radio" aria-checked={value === v}
-            aria-label={title} title={title}
-            className={value === v ? 'active' : ''}
-            onClick={() => onChange(v)}
-          >{text}</button>
-        ))}
-      </div>
-    </Field>
-  );
+  return <Field label={label}><RawSelect label={label} value={value} options={options} onChange={onChange} /></Field>;
 }
-
-export function Select({ label, value, options, onChange }) {
-  return (
-    <Field label={label}>
-      <div className="select-wrap">
-        <select className="input" value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
-          {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-        </select>
-        <ChevronDown size={14} className="select-chevron" />
-      </div>
-    </Field>
-  );
-}
+export const Select = Segmented;
 
 export function Toggle({ label, checked, onChange }) {
   return (
-    <label className="toggle">
-      <span>{label}</span>
-      <input type="checkbox" role="switch" checked={checked} onChange={e => onChange(e.target.checked)} />
-      <span className="track" aria-hidden="true"><span className="thumb" /></span>
+    <label className="field check-row">
+      <span className="field-label">{label}</span>
+      <span className="field-ctl">
+        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
+        <span className="box" aria-hidden="true" />
+      </span>
     </label>
   );
 }
 
 export function Color({ label, value, onChange }) {
   return (
-    <label className="color">
-      <span className="swatch" style={{ background: value }}>
-        <input type="color" value={value} aria-label={label} onChange={e => onChange(e.target.value)} />
-      </span>
-      <span className="hex">{value.toUpperCase()}</span>
-    </label>
+    <span className="swatch" style={{ '--c': value }} title={value.toUpperCase()}>
+      <input type="color" value={value} aria-label={label} onChange={e => onChange(e.target.value)} />
+    </span>
   );
 }
 
@@ -152,35 +152,32 @@ export function NumberInput({ label, value, min, max, suffix = 'px', onChange })
   };
   return (
     <Field label={label}>
-      <div className="input-affix">
+      <span className="line-input">
         <input
-          className="input" type="number" min={min} max={max} step="1" value={draft} aria-label={label}
+          type="number" min={min} max={max} step="1" value={draft} aria-label={label}
           onChange={e => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={e => { if (e.key === 'Enter') commit(); }}
         />
         {suffix && <span className="affix">{suffix}</span>}
-      </div>
+      </span>
     </Field>
   );
 }
 
+/* "UPLOAD PHOTOS" link that also accepts files dropped onto it. */
 export function DropZone({ onFiles }) {
   const [over, setOver] = useState(false);
   const inputRef = useRef(null);
   return (
     <div
-      className={'dropzone' + (over ? ' over' : '')}
-      role="button" tabIndex={0}
-      onClick={() => inputRef.current.click()}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current.click(); } }}
+      className={'upload-row' + (over ? ' over' : '')}
       onDragOver={e => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={e => { e.preventDefault(); e.stopPropagation(); setOver(false); onFiles(Array.from(e.dataTransfer.files)); }}
     >
-      <ImagePlus size={20} strokeWidth={1.75} />
-      <div className="dz-title">Drop photos here</div>
-      <div className="dz-sub">or click to browse · JPG, PNG, WebP</div>
+      <button type="button" className="raw-link" onClick={() => inputRef.current.click()}>Upload photos</button>
+      <span className="upload-hint">{over ? 'Drop to add' : 'or drop files · JPG, PNG, WebP'}</span>
       <input
         ref={inputRef} type="file" accept="image/*" multiple hidden
         onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ''; onFiles(files); }}
