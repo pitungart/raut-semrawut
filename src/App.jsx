@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { Frame, ImagePlus, Images, Plus, Spline, Type, Wind } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 import { CollageEngine, DEFAULT_SETTINGS, FONT_FAMILY, PRESETS } from './engine.js';
 import {
-  Color, DropZone, Field, NumberInput, Section, Segmented, Select, Slider, Toggle,
+  CableRange, Color, DropZone, Field, NumberInput, Section, Segmented, Select, Slider, Toggle,
 } from './components/Controls.jsx';
 import { Inspector } from './components/Inspector.jsx';
 import { TexturePicker } from './components/TexturePicker.jsx';
@@ -202,27 +202,30 @@ export default function App() {
       </main>
 
       <aside className="panel">
-        {sel && <Inspector key={sel.id} engine={engine} node={sel} textareaRef={textareaRef} />}
-
-        <Section title="Pieces" icon={Images} defaultOpen>
+        <Section title="Photos" defaultOpen>
           <DropZone onFiles={addFiles} />
           {photoCount > 0 && <p className="note">{photoCount} photo{photoCount > 1 ? 's' : ''} in the collage</p>}
           <Slider label="Size contrast" value={s.sizeContrast} display={f(s.sizeContrast, 2)} min={0} max={1} step={0.01} onChange={set('sizeContrast')} />
           <Slider label="Black & white ratio" value={s.bwRatio} display={Math.round(s.bwRatio * 100) + '%'} min={0} max={1} step={0.01} onChange={set('bwRatio')} />
         </Section>
 
-        <Section title="Cables" icon={Spline} defaultOpen>
+        {sel && <Inspector key={sel.id} engine={engine} node={sel} textareaRef={textareaRef} />}
+
+        <Section title="Cables" defaultOpen>
           <Segmented
-            label="Connection" value={s.cableMode}
-            options={[['web', 'Web'], ['chain', 'Chain'], ['hub', 'Hub']]}
+            label="Connection logic" value={s.cableMode}
+            options={[['web', 'Sparse web'], ['chain', 'Chain'], ['hub', 'Hub']]}
             onChange={set('cableMode')}
           />
           <Slider label="Cables per piece" value={s.cablesPer} min={1} max={5} step={1} onChange={set('cablesPer')} />
           <Slider label="Weight" value={s.cableWeight} display={f(s.cableWeight, 1) + ' px'} min={0.5} max={12} step={0.1} onChange={set('cableWeight')} />
-          <Field label="Color">
+          <div className="field slider-row color-row">
+            <span className="field-label">Color</span>
             <Color label="Cable color" value={s.cableColor} onChange={set('cableColor')} />
-          </Field>
-          <Slider label="Opacity" value={s.cableOpacity} display={Math.round(s.cableOpacity * 100) + '%'} min={0.1} max={1} step={0.01} onChange={set('cableOpacity')} />
+            <span className="field-label">Opacity</span>
+            <CableRange label="Opacity" value={s.cableOpacity} min={0.1} max={1} step={0.01} onChange={set('cableOpacity')} />
+            <span className="value">{Math.round(s.cableOpacity * 100)}%</span>
+          </div>
           <TexturePicker
             value={s.cableTexture} mix={s.mixTextures} color={s.cableColor}
             onChange={set('cableTexture')} onMixChange={set('mixTextures')}
@@ -230,41 +233,42 @@ export default function App() {
           {s.cableTexture !== 'solid' && (
             <Slider label="Texture density" value={s.cableDensity} display={f(s.cableDensity, 2) + '×'} min={0.3} max={3} step={0.05} onChange={set('cableDensity')} />
           )}
-          <Slider label="Sag" value={s.sag} display={f(s.sag, 2)} min={0} max={3} step={0.02} onChange={set('sag')} />
+          <Slider label="Sag amount" shape="wave" value={s.sag} display={f(s.sag, 2)} min={0} max={3} step={0.02} onChange={set('sag')} />
           <Slider label="Overshoot" value={s.overshoot} display={f(s.overshoot, 2)} min={0} max={1} step={0.01} onChange={set('overshoot')} />
           <Segmented
             label="Layering" value={s.layering}
-            options={[['behind', 'Behind'], ['front', 'Front'], ['mixed', 'Mixed']]}
+            options={[['behind', 'Behind pieces'], ['front', 'In front'], ['mixed', 'Mixed']]}
             onChange={set('layering')}
           />
         </Section>
 
-        <Section title="Text" icon={Type} defaultOpen>
-          <button className="btn btn-outline add-btn" onClick={addText}><Plus size={15} />Add text</button>
+        <Section title="Text" defaultOpen>
+          <div className="link-row">
+            <button type="button" className="raw-link" onClick={addText}>+ Add text</button>
+          </div>
           {engine.texts.length > 0 ? (
-            <ul className="layer-list">
+            <ol className="layer-list">
               {engine.texts.slice().reverse().map(t => (
                 <li key={t.id}>
-                  <button className={sel?.id === t.id ? 'active' : ''} onClick={() => engine.select(t.id)}>
-                    <Type size={14} />
+                  <button type="button" className={sel?.id === t.id ? 'active' : ''} onClick={() => engine.select(t.id)}>
                     <span className="layer-name">{(t.value || '').split('\n')[0] || 'Empty text'}</span>
                     {t.rot ? <span className="layer-meta">{Math.round(t.rot)}°</span> : null}
                   </button>
                 </li>
               ))}
-            </ul>
+            </ol>
           ) : (
             <p className="note">Add separate text blocks, each with its own position, size, weight and rotation.</p>
           )}
         </Section>
 
-        <Section title="Motion" icon={Wind}>
+        <Section title="Motion">
           <Toggle label="Idle drift & sway" checked={s.motionIdle} onChange={set('motionIdle')} />
           <Toggle label="Drag physics" checked={s.dragPhysics} onChange={set('dragPhysics')} />
           <p className="note">Preview only. Exports always render the clean static frame.</p>
         </Section>
 
-        <Section title="Canvas" icon={Frame}>
+        <Section title="Canvas">
           <Select
             label="Preset" value={s.preset}
             options={[['a4', 'A4 portrait · 1240 × 1754'], ['a3', 'A3 portrait · 1754 × 2480'], ['sq', 'Square · 2048'], ['story', 'Instagram story · 1080 × 1920'], ['custom', 'Custom']]}

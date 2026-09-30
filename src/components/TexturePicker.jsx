@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { Check } from 'lucide-react';
 import { drawTexture, TEXTURES } from '../textures.js';
 import { Field } from './Controls.jsx';
 
@@ -37,7 +36,7 @@ export function TexturePicker({ value, mix, color, onChange, onMixChange }) {
   };
   return (
     <>
-      <Field label="Texture">
+      <Field label="Texture" stack>
         <div className="texture-grid" role="radiogroup" aria-label="Cable texture">
           {tiles.map(([id, name]) => (
             <button
@@ -52,7 +51,7 @@ export function TexturePicker({ value, mix, color, onChange, onMixChange }) {
         </div>
       </Field>
       {value === 'mix' && (
-        <Field label="Mix includes">
+        <Field label="Mix includes" stack>
           <div className="chips">
             {TEXTURES.map(([id, name]) => {
               const on = mix.includes(id);
@@ -63,7 +62,7 @@ export function TexturePicker({ value, mix, color, onChange, onMixChange }) {
                   onClick={() => toggleMix(id)}
                   title={on && mix.length === 1 ? 'At least one texture stays in the mix' : undefined}
                 >
-                  {on && <Check size={12} strokeWidth={2.5} />}{name}
+                  <span className="box-mark" aria-hidden="true" />{name}
                 </button>
               );
             })}
